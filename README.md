@@ -10,3 +10,11 @@ Recursos utilizados:
     tópico do cv_camera (use rostopic list e rostopic echo [nome do topico] para descobrir, te vira)
 Baixar o package e instalar com double click além de fazer os dpkg da vida e apt install
 *O maldido do cuda bota o instalador dos samples em /usr/local/cuda-9.1/bin/cuda-install-samples-9.1.sh*
+
+Ao instalar o cudnn, mudar o usr/include/cudnn.h e trocar 
+
+
+And try change the line:
+#include "driver_types.h"
+para 
+#include <driver_typer.h>
