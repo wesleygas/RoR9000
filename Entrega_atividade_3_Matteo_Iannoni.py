@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 import cv2
 import numpy as np
 
@@ -14,7 +15,7 @@ cap = cv2.VideoCapture(0)
 
 LAST_GOODS = []
 
-img1 = cv2.cvtColor(cv2.imread("madfox.jpg"), cv2.COLOR_BGR2GRAY)
+img1 = cv2.cvtColor(cv2.imread("ala.png"), cv2.COLOR_BGR2GRAY)
 
 def auto_canny(image, sigma=0.05):
 	v = np.median(image)

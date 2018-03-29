@@ -75,6 +75,9 @@ if __name__ == '__main__' :
             p1 = (int(bbox[0]), int(bbox[1]))
             p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
             cv2.rectangle(frame, p1, p2, (255,0,0), 2, 1)
+            coordx = int(p2[0]+((p1[0]-p2[0])/2))
+            coordy = int(p2[1]+(p1[1]-p2[1])/2)
+            cv2.circle(frame,(coordx,coordy),2,(255,0,0),1)
         else :
             # Tracking failure
             cv2.putText(frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
