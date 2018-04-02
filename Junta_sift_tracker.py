@@ -9,10 +9,10 @@ import cv2
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-time.sleep(1)
+time.sleep(0.5)
 
 #------------Configuracao do SIFT ----------
-MIN_MATCH_COUNT = 60
+MIN_MATCH_COUNT = 30
 
 img1 = cv2.imread('alac2.jpg',0)# Imagem a procurar
 
@@ -44,7 +44,7 @@ def create_track():
 tracker,tracker_type =create_track()
 ok, frame = cap.read()
 #Primeiras coordenadas da Bounding box (manualmente)
-bbox = (287, 23, 86, 320)
+bbox = (287, 23, 200, 200) #Ponto inicial(topo esquerdo) largura-altura
 
 # select a bounding box via GUI
 #bbox = cv2.selectROI(frame, False)
@@ -55,6 +55,8 @@ ok = tracker.init(frame, bbox)
 #------Inicio do Loop de atualização
 
 while True:
+    ok, frame = cap.read()
+
     ret, img2 = cap.read()
     # Save an colored image to use as output
     img2_color = img2.copy()
@@ -90,46 +92,55 @@ while True:
         pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
 
         # Transforma os pontos da imagem origem para onde estao na imagem destino
-        dst = cv2.perspectiveTransform(pts,M)
+        dst = np.int32(cv2.perspectiveTransform(pts,M))
         # Desenha as linhas
-        cv2.polylines(img2_color,[np.int32(dst)],True,(0,0,255),3, cv2.LINE_AA)
-
+        #cv2.polylines(frame,dst,True,(0,0,255),3, cv2.LINE_AA)
+        print(dst)
         #desenha o centro do polígono
-        maxY = np.int32(dst[1][0][1])
-        minY = np.int32(dst[0][0][1])
+        #top_left = dst[0][0]
+        #top_right = dst[3][0]
+        #bot_right = dst[2][0]
+        #bot_left = dst[1][0]
+        all_x = dst[:,0,0]
+        all_y = dst[:,0,1]
+        maxY = np.max(all_y)
+        minY = np.min(all_y)
 
-        maxX = np.int32(dst[3][0][1])
-        minX = np.int32(dst[0][0][0])
-        cv2.circle(frame, (minX,minY), 15, (255, 0, 0), 6)
-        cv2.circle(frame, (maxX,maxY), 15, (255, 0, 0), 6)
+        maxX = np.max(all_x)
+        minX = np.min(all_x)
+
+        cv2.circle(frame, (minX,minY), 15, (0, 255, 0), 6)
+        cv2.circle(frame,(maxX,maxY) , 15, (255, 0, 255), 6)
+
+        bbox = (minX,minY,(maxX-minX),(maxY-minY))
         tracker, tracker_type = create_track()
-        ok = tracker.init(frame, (minX,minY,maxY,maxX+(minX+maxX)))
+
+        ok = tracker.init(frame,bbox)
         cv2.imshow("Tracking", frame)
         #print(ok, "Qualqure")
         #cv2.rectangle(frame, (minX,maxY), (maxX,minY), (255,0,0), 2, 1)
         #pol_y = np.int32((dst[1][0][1] - dst[0][0][1])/2 + dst[0][0][1])
         #pol_x = np.int32((dst[3][0][1] - dst[0][0][0])/2 + dst[0][0][1])
 
-    for i in range(1): # Read a new frame for 30 times
-
+    for i in range(40): # Read a new frame for 30 times
+        ok, frame = cap.read()
         if ok:
 
-            ok, frame = cap.read()
+            #ok, frame = cap.read()
             # Start timer
             timer = cv2.getTickCount()
 
             # Update tracker
             ok, bbox = tracker.update(frame)
 
-            # Calculate Frames per second (FPS)
-            fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
+
 
             # Draw bounding box
             if ok:
                 # Tracking success
                 p1 = (int(bbox[0]), int(bbox[1]))
                 p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-                cv2.rectangle(frame, p1, p2, (255,0,0), 2, 1)
+                cv2.rectangle(frame, p1, p2, (0,255,0), 3, 3)
                 #Bota um circulo no centro da box
                 coordx = int(p2[0]+((p1[0]-p2[0])/2))
                 coordy = int(p2[1]+(p1[1]-p2[1])/2)
@@ -141,11 +152,15 @@ while True:
         # Display tracker type on frame
         cv2.putText(frame, tracker_type + " Tracker", (100,20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50,170,50),2);
 
+        # Calculate Frames per second (FPS)
+        fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
+
         # Display FPS on frame
         cv2.putText(frame, "FPS : " + str(int(fps)), (100,50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50,170,50), 2);
 
+
         # Display result
-        #cv2.imshow("Tracking", frame)
+        cv2.imshow("Tracking", frame)
 
         # Exit if ESC pressed
         k = cv2.waitKey(1) & 0xff
