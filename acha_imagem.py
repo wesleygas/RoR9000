@@ -15,6 +15,9 @@ bridge = CvBridge()
 
 cv_image = None
 
+media = []
+centro = []
+atraso = 1.5
 
 ##Todo: ros compliant
 #cap = cv2.VideoCapture(0)
@@ -23,14 +26,14 @@ cv_image = None
 #time.sleep(0.5)
 
 #------------Configuracao do SIFT ----------
-MIN_MATCH_COUNT = 50
+MIN_MATCH_COUNT = 30
 
 img1 = cv2.imread('alac2.jpg',0)# Imagem a procurar
 
 sift = cv2.xfeatures2d.SIFT_create()
 kp1, des1 = sift.detectAndCompute(img1,None)
 
-ok = True
+
 
 #------------ Configuracao do tracker -------------
 #Seleciona o tipo de tracking algorithm
@@ -69,8 +72,6 @@ bbox = (0, 100, 200, 200) #Caixa inicial((topo esquerdo),largura,altura)
 contador = 0
 def recebe_imagem(imagem):
 	global contador
-
-
 	frame = bridge.compressed_imgmsg_to_cv2(imagem, "bgr8")
 	vai(frame,contador)
 	contador += 1
@@ -78,9 +79,7 @@ def recebe_imagem(imagem):
 		contador = 0
 
 def vai(frame, contador):
-	global ok,tracker,tracker_type,bbox
-
-	if(contador == 0): #Every time the counter gets reset Try to find the café extra forte
+	if(contador == 0):
 		# Copy the image to leave the colored one to be used as output
 		frame_gray = frame.copy()
 		# Convert the frame to grayscale
@@ -133,13 +132,11 @@ def vai(frame, contador):
 
 			cv2.circle(frame, (minX,minY), 15, (0, 255, 0), 6)
 			cv2.circle(frame,(maxX,maxY) , 15, (255, 0, 255), 6)
-			if((maxX-minX)> 15 and (maxY-minY)>15):
-				bbox = (minX,minY,(maxX-minX),(maxY-minY))
-				tracker, tracker_type = create_tracker()
-				ok = tracker.init(frame,bbox)
-			else:
-				print("IIhh rapah")
-			print(bbox)
+
+			bbox = (minX,minY,(maxX-minX),(maxY-minY))
+			tracker, tracker_type = create_tracker()
+
+			ok = tracker.init(frame,bbox)
 			cv2.imshow("Tracking", frame)
 			#print(ok, "Qualqure")
 			#cv2.rectangle(frame, (minX,maxY), (maxX,minY), (255,0,0), 2, 1)
@@ -149,7 +146,16 @@ def vai(frame, contador):
 	else: # Read a new frame for 30 times
 
 		if ok:
+
+			#ok, frame = cap.read()
+			# Start timer
+			timer = cv2.getTickCount()
+
+			# Update tracker
 			ok, bbox = tracker.update(frame)
+
+
+
 			# Draw bounding box
 			if ok:
 				# Tracking success
@@ -163,11 +169,21 @@ def vai(frame, contador):
 			else :
 				# Tracking failure
 				cv2.putText(frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
-				bbox = (0,0,0,0)
+
+		# Display tracker type on frame
+		cv2.putText(frame, tracker_type + " Tracker", (100,20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50,170,50),2);
+
+		# Calculate Frames per second (FPS)
+		fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
+
+		# Display FPS on frame
+		cv2.putText(frame, "FPS : " + str(int(fps)), (100,50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50,170,50), 2);
+
 
 		# Display result
 		cv2.imshow("Tracking", frame)
 
+		# Exit if ESC pressed
 		k = cv2.waitKey(1) & 0xff
 		if k == 27 :
 			cap.release()
@@ -177,46 +193,21 @@ def vai(frame, contador):
 
 
 if __name__=="__main__":
-	rospy.init_node("sla")
-
-	# Para usar a Raspberry Pi
-	topico_raspberry_camera = "/raspicam_node/image/compressed"
-	# Para usar a webcam
-	topico_webcam = "/cv_camera/image_raw/compressed"
-
-	recebedor = rospy.Subscriber(topico_webcam, CompressedImage, recebe_imagem, queue_size=15, buff_size = 2**24)
-	print("Usando Webcam")
-	velocidade_saida = rospy.Publisher("cmd_vel", Twist, queue_size = 1)
+	rospy.init_node("tracking")
+	recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, recebe_imagem, queue_size=1, buff_size = 2**24)
+	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
 
 	try:
 		while not rospy.is_shutdown():
-			vel = Twist(Vector3(0,0,0), Vector3(0,0,0))
-			if(bbox == (0,0,0,0)):
-				print("BBox invalida")
-				vel = Twist(Vector3(0,0,0), Vector3(0,0,0))
+			if 40<30: # Se a media estiver muito proxima do centro anda para frente
+				vel = Twist(Vector3(0.5,0,0), Vector3(0,0,0))
 			else:
-				centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
-
-				if(centro[0] < 280):
-					print("esquerda")
-					vel = Twist(Vector3(0,0,0),Vector3(0,0,(280-centro[0])/100))
-				elif(centro[0] > 380):
-					print("Direita")
-					vel = Twist(Vector3(0,0,0), Vector3(0,0,-(centro[0]-380)/100))
-				else:
-					if(bbox[-1] > 240):
-						print("And now we rest")
-						vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
-					else:
-						print("Foward we gooo!")
-						vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
-
+				if 1 > 0: # Vira a direita
+					vel = Twist(Vector3(0,0,0), Vector3(0,0,-0.2))
+				else: # Vira a esquerda
+					vel = Twist(Vector3(0,0,0), Vector3(0,0,0.2))
 			velocidade_saida.publish(vel)
 			rospy.sleep(0.01)
 
 	except rospy.ROSInterruptException:
 		print("Ocorreu uma exceção com o rospy")
-
-
-	#except rospy.ROSInterruptException:
-	#	print("Ocorreu uma exceção com o rospy")
