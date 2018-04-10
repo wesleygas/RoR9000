@@ -1,26 +1,40 @@
-#-*- coding: utf-8 -*-
-import numpy as np
-from matplotlib import pyplot as plt
-import time
-import sys
-import cv2
+#! /usr/bin/env python
+# -*- coding:utf-8 -*-
 
 import rospy
+import numpy as np
+import tf
+from matplotlib import pyplot as plt
+import math
+import cv2
+import time
 from geometry_msgs.msg import Twist, Vector3, Pose
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
+import smach
+import smach_ros
+
 
 bridge = CvBridge()
 
 cv_image = None
 
+# Variáveis para permitir que o roda_todo_frame troque dados com a máquina de estados
+media = []
+centro = []
+area = 0.0
+contador = 0
 
-##Todo: ros compliant
-#cap = cv2.VideoCapture(0)
-#cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-#cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-#time.sleep(0.5)
+tolerancia_x = 50
+tolerancia_y = 20
+ang_speed = 0.4
+area_ideal = 60000 # área da distancia ideal do contorno - note que varia com a resolução da câmera
+tolerancia_area = 20000
+
+# Atraso máximo permitido entre a imagem sair do Turbletbot3 e chegar no laptop do aluno
+atraso = 0.5E9
+check_delay =False # Só usar se os relógios ROS da Raspberry e do Linux desktop estiverem sincronizados
 
 #------------Configuracao do SIFT ----------
 MIN_MATCH_COUNT = 40
@@ -53,27 +67,10 @@ def create_tracker():
 	return tracker,tracker_type
 
 tracker,tracker_type = create_tracker()
-#ok, frame = cap.read()
+
+
 #Primeiras coordenadas da Bounding box (manualmente)
-bbox = (0, 100, 200, 200) #Caixa inicial((topo esquerdo),largura,altura)
-
-# select a bounding box via GUI
-#bbox = cv2.selectROI(frame, False)
-
-# Initialize tracker with first frame and bounding box
-#ok = tracker.init(frame, bbox)
-
-
-
-#------Inicio do Loop de atualização
-contador = 0
-def recebe_imagem(imagem):
-	global contador
-	frame = bridge.compressed_imgmsg_to_cv2(imagem, "bgr8")
-	vai(frame,contador)
-	contador += 1
-	if contador > 2:
-		contador = 0
+bbox = (0, 0, 0, 0) #Caixa inicial((topo esquerdo),largura,altura)
 
 def vai(frame, contador):
 
@@ -168,53 +165,120 @@ def vai(frame, contador):
 
 		k = cv2.waitKey(1) & 0xff
 		if k == 27 :
-			#cap.release()
+			cap.release()
 			cv2.destroyAllWindows()
 
 
 
-if __name__=="__main__":
-	rospy.init_node("sla")
 
-	# Para usar a Raspberry Pi
-	topico_raspberry_camera = "/raspicam_node/image/compressed"
-	# Para usar a webcam
-	topico_webcam = "/cv_camera/image_raw/compressed"
 
-	recebedor = rospy.Subscriber(topico_raspberry_camera, CompressedImage, recebe_imagem, queue_size=15, buff_size = 2**24)
-	print("Usando Webcam")
-	velocidade_saida = rospy.Publisher("cmd_vel", Twist, queue_size = 1)
+def roda_todo_frame(imagem):
 
+	global cv_image
+	global media
+	global bbox,contador
+
+	now = rospy.get_rostime()
+	imgtime = imagem.header.stamp
+	lag = now-imgtime
+	delay = lag.nsecs
+	if delay > atraso and check_delay==True:
+		return #Ou seja, para a função e descarta o frame
 	try:
-		while not rospy.is_shutdown():
-			vel = Twist(Vector3(0,0,0), Vector3(0,0,0))
-			if(bbox == (0,0,0,0)):
-				print("BBox invalida")
-				vel = Twist(Vector3(0,0,0), Vector3(0,0,0))
-			else:
-				centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
-
-				if(bbox[-1] > 300):
-					print("And now we rest",bbox[-1])
-					vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
-				else:
-					print("Foward we gooo!")
-					vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
-					if(centro[0] < 280):
-						print("esquerda")
-						vel = Twist(Vector3(0.1,0,0),Vector3(0,0,(280-centro[0])/200))
-					elif(centro[0] > 380):
-						print("Direita")
-						vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-(centro[0]-380)/200))
+		frame = bridge.compressed_imgmsg_to_cv2(imagem, "bgr8")
+		vai(frame,contador)
+		contador += 1
+		if contador > 2:
+			contador = 0
+	except CvBridgeError as e:
+		print('ex', e)
 
 
 
+
+
+
+## Classes - estados
+
+
+class Procura(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['achou', 'girando'])
+
+
+    def execute(self, userdata):
+		global velocidade_saida,bbox
+
+		rospy.sleep(0.01)
+
+		if bbox == (0,0,0,0):
+			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.3))
 			velocidade_saida.publish(vel)
-			rospy.sleep(0.01)
+			return 'girando'
+		else:
+			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
+			velocidade_saida.publish(vel)
+			return 'achou'
 
-	except rospy.ROSInterruptException:
-		print("Ocorreu uma exceção com o rospy")
+
+class Seguindo(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['seguindo', 'cheguei', 'perdi'])
+
+    def execute(self, userdata):
+		global velocidade_saida,bbox
+		rospy.sleep(0.01)
+		print bbox
+		if bbox == (0,0,0,0):
+			return 'perdi'
+		else:
+			centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
+
+			if(bbox[-1] > 300):
+				print("And now we rest",bbox[-1])
+				vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
+				velocidade_saida.publish(vel)
+				return 'cheguei'
+			else:
+				print("Foward we gooo!")
+				vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
+				if(centro[0] < 280):
+
+					vel = Twist(Vector3(0.1,0,0),Vector3(0,0,(280-centro[0])/200))
+				elif(centro[0] > 380):
+				
+					vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-(centro[0]-380)/200))
+				velocidade_saida.publish(vel)
+				return 'seguindo'
+# main
+def main():
+	global velocidade_saida
+	global buffer
+	rospy.init_node('cf_estados')
+
+	# Para usar a webcam
+	#recebedor = rospy.Subscriber("/cv_camera/image_raw/compressed", CompressedImage, roda_todo_frame, queue_size=1, buff_size = 2**24)
+	recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, roda_todo_frame, queue_size=10, buff_size = 2**24)
+	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
+
+	# Create a SMACH state machine
+	sm = smach.StateMachine(outcomes=['terminei'])
+
+	# Open the container
+	with sm:
+
+	    smach.StateMachine.add('PROCURANDO', Procura(),
+	                            transitions={'girando': 'PROCURANDO',
+	                            'achou':'SEGUINDO'})
+	    smach.StateMachine.add('SEGUINDO', Seguindo(),
+	                            transitions={'perdi': 'PROCURANDO',
+	                            'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO'})
 
 
-	#except rospy.ROSInterruptException:
-	#	print("Ocorreu uma exceção com o rospy")
+	# Execute SMACH plan
+	outcome = sm.execute()
+	#rospy.spin()
+
+
+if __name__ == '__main__':
+    main()
