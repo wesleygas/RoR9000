@@ -15,15 +15,14 @@ def GonnaCrash(mini):
 	return mini[0]<0.3
 def Dont(dire):
 	if (dire==0):
-		velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 0))
+		velocidade = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
 		velocidade_saida.publish(velocidade)
 		rospy.sleep(0.3)
-	else:
-		velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
-		velocidade_saida.publish(velocidade)
-		rospy.sleep(0.1)
-	
-	
+	velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
+	velocidade_saida.publish(velocidade)
+	rospy.sleep(0.3)
+
+
 def scaneou(dado):
 	global mini
 	mini = [dado.range_max, 0]
@@ -37,7 +36,7 @@ def scaneou(dado):
 	#print("Intensities")
 	#print(np.array(dado.intensities).round(decimals=2))
 
-	
+
 
 
 if __name__=="__main__":
@@ -53,17 +52,15 @@ if __name__=="__main__":
 	while not rospy.is_shutdown():
 		#print("Oeee", mini)
 		if GonnaCrash(mini):
-			if (mini[1] < 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] > 0):
-				Dont(0)	
-			if (mini[1] < 360 and mini[1] > 280):
+			if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
+				Dont(0)
+			if (mini[1] <= 360 and mini[1] > 288):
 				Dont(1)
-			elif (mini[1] < 80 and mini[1] > 0):
+			elif (mini[1] < 72 and mini[1] > 0):
 				Dont(-1)
 			print("ganna",mini)
 		else:
 			print("ginna",mini)
-			velocidade = Twist(Vector3(2, 0, 0), Vector3(0, 0, 0))
+			velocidade = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
 		velocidade_saida.publish(velocidade)
 		rospy.sleep(0.1)
-
-
