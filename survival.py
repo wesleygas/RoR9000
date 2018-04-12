@@ -66,6 +66,8 @@ def Bateu(angulo):
 
 	
 def GonnaCrash(mini):
+	global desvia
+	desvia = True
 	return mini[0]<0.3
 
 def Dont(dire):
@@ -88,42 +90,22 @@ def scaneou(dado):
 			if mini[0] > lelescan[i]:
 				mini = [lelescan[i],i]
 	#print (len(lelescan))
-	#print("Intensities")
-	#print(np.array(dado.intensities).round(decimals=2))
 
 
+def desviando(mini):
+	if GonnaCrash(mini):
+		if bateu:
+			Bateu(angulo)
+			bateu = False
+		elif not tempo_de_batida():
+			if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
+				Dont(0)
+			if (mini[1] <= 360 and mini[1] > 288):
+				Dont(1)
+			elif (mini[1] < 72 and mini[1] >= 0):
+				Dont(-1)
+		return "sobreviva"
+	else:
+		desvia = False
+		return "ufa"
 
-
-if __name__=="__main__":
-
-	rospy.init_node("le_scan")
-	tmp = rospy.get_rostime().secs
-
-	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 3 )
-	recebe_scan = rospy.Subscriber("/scan", LaserScan, scaneou)
-	recebe_scan2 = rospy.Subscriber("/imu", Imu, leu_imu, queue_size =1)
-	#print("titi", LaserScan)
-
-
-
-	while not rospy.is_shutdown():
-		print(bateu)
-		if GonnaCrash(mini):
-			if bateu:
-				print("batico")
-				Bateu(angulo)
-				bateu = False
-			elif not tempo_de_batida():
-				if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
-					Dont(0)
-				if (mini[1] <= 360 and mini[1] > 288):
-					Dont(1)
-				elif (mini[1] < 72 and mini[1] >= 0):
-					Dont(-1)
-			#print("ganna",mini)
-		
-		else:
-			#print("ginna",mini)
-			velocidade = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
-		velocidade_saida.publish(velocidade)
-		rospy.sleep(0.1)

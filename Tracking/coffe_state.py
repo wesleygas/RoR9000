@@ -14,6 +14,7 @@ from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
 import smach
 import smach_ros
+import survival as su
 
 
 bridge = CvBridge()
@@ -25,7 +26,6 @@ media = []
 centro = []
 area = 0.0
 contador = 0
-
 tolerancia_x = 50
 tolerancia_y = 20
 ang_speed = 0.4
@@ -203,12 +203,14 @@ def roda_todo_frame(imagem):
 
 class Procura(smach.State):
     def __init__(self):
-        smach.State.__init__(self, outcomes=['achou', 'girando'])
+        smach.State.__init__(self, outcomes=['achou', 'girando','sobreviva'])
 
 
     def execute(self, userdata):
 		global velocidade_saida,bbox
-
+		
+		if su.desvia(su.mini):
+			return 'sobreviva'
 		rospy.sleep(0.01)
 
 		if bbox == (0,0,0,0):
@@ -223,11 +225,13 @@ class Procura(smach.State):
 
 class Seguindo(smach.State):
     def __init__(self):
-        smach.State.__init__(self, outcomes=['seguindo', 'cheguei', 'perdi'])
+        smach.State.__init__(self, outcomes=['seguindo', 'cheguei', 'perdi','sobreviva'])
 
     def execute(self, userdata):
 		global velocidade_saida,bbox
 		rospy.sleep(0.01)
+		if su.desvia(su.mini):
+			return 'sobreviva'
 		print bbox
 		if bbox == (0,0,0,0):
 			return 'perdi'
@@ -250,6 +254,16 @@ class Seguindo(smach.State):
 					vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-(centro[0]-380)/200))
 				velocidade_saida.publish(vel)
 				return 'seguindo'
+
+class Survival(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['sobreviva','ufa'])
+
+
+    def execute(self, userdata):
+	su.desviando(su.mini)
+	rospy.sleep(0.01)
+
 # main
 def main():
 	global velocidade_saida
@@ -260,6 +274,8 @@ def main():
 	#recebedor = rospy.Subscriber("/cv_camera/image_raw/compressed", CompressedImage, roda_todo_frame, queue_size=1, buff_size = 2**24)
 	recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, roda_todo_frame, queue_size=10, buff_size = 2**24)
 	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
+	recebe_scan = rospy.Subscriber("/scan", LaserScan, su.scaneou)
+	recebe_scan2 = rospy.Subscriber("/imu", Imu, su.leu_imu, queue_size =1)
 
 	# Create a SMACH state machine
 	sm = smach.StateMachine(outcomes=['terminei'])
@@ -267,12 +283,15 @@ def main():
 	# Open the container
 	with sm:
 
-	    smach.StateMachine.add('PROCURANDO', Procura(),
+	   	smach.StateMachine.add('PROCURANDO', Procura(),
 	                            transitions={'girando': 'PROCURANDO',
-	                            'achou':'SEGUINDO'})
-	    smach.StateMachine.add('SEGUINDO', Seguindo(),
+	                            'achou':'SEGUINDO','ufa':'PROCURANDO','sobreviva':})
+	   	smach.StateMachine.add('SEGUINDO', Seguindo(),
 	                            transitions={'perdi': 'PROCURANDO',
 	                            'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO'})
+
+		smach.StateMachine.add('SOBREVIVA', Survival(),
+	                            transitions={'sobreviva':'SOBREVIVA','ufa': 'PROCURANDO'})
 
 
 	# Execute SMACH plan
