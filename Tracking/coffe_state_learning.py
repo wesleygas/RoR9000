@@ -180,10 +180,10 @@ def vai(frame, contador):
 		fram2 = frame.copy()
 		if contadois != 0:
 			print("Entroooooooooooooooooooooooooooooooooooo")
-			if contadois%1 == 0:
+			if contadois%10 == 0:
 				obj.learnbackground(fram2)
 				print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
-			if contadois%30 == 0:
+			if contadois%100 == 0:
 				print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
 				obj.learnobject(fram2)
 				kp1, des1 = sift.detectAndCompute(obj.objeto,None)
@@ -226,10 +226,9 @@ def roda_todo_frame(imagem):
 
 ## Classes - estados
 
-
-class Procura(smach.State):
+class aprendizado(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['achou', 'girando'])
+		smach.State.__init__(self, outcomes=['aprendendo', 'aprendi'])
 
 
 	def execute(self, userdata):
@@ -237,45 +236,68 @@ class Procura(smach.State):
 
 		rospy.sleep(0.5)
 
-		if bbox == (0,0,0,0):
-			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.3))
-			velocidade_saida.publish(vel)
-			return 'girando'
-		else:
+		if aprendendo == True:
 			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
 			velocidade_saida.publish(vel)
-			return 'achou'
+			return 'aprendendo'
+		else:
+			return 'aprendi'
 
+class Procura(smach.State):
+		def __init__(self):
+			smach.State.__init__(self, outcomes=['achou', 'girando', 'aprendendo'])
+
+
+		def execute(self, userdata):
+			global velocidade_saida,bbox
+
+			rospy.sleep(0.5)
+
+			if aprendendo == False:
+
+				if bbox == (0,0,0,0):
+					vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.3))
+					velocidade_saida.publish(vel)
+					return 'girando'
+				else:
+					vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
+					velocidade_saida.publish(vel)
+					return 'achou'
+			else:
+				return 'aprendendo'
 
 class Seguindo(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['seguindo', 'cheguei', 'perdi'])
+		smach.State.__init__(self, outcomes=['seguindo', 'cheguei', 'perdi','aprendendo'])
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox
 		rospy.sleep(0.5)
 		print bbox
-		if bbox == (0,0,0,0):
-			return 'perdi'
-		else:
-			centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
-
-			if(bbox[-1] > 300):
-				print("And now we rest",bbox[-1])
-				vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
-				velocidade_saida.publish(vel)
-				return 'cheguei'
+		if aprendendo == False:
+			if bbox == (0,0,0,0):
+				return 'perdi'
 			else:
-				print("Foward we gooo!")
-				vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
-				if(centro[0] < 280):
+				centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
 
-					vel = Twist(Vector3(0.1,0,0),Vector3(0,0,(280-centro[0])/200))
-				elif(centro[0] > 380):
+				if(bbox[-1] > 300):
+					print("And now we rest",bbox[-1])
+					vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
+					velocidade_saida.publish(vel)
+					return 'cheguei'
+				else:
+					print("Foward we gooo!")
+					vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
+					if(centro[0] < 280):
 
-					vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-(centro[0]-380)/200))
-				velocidade_saida.publish(vel)
-				return 'seguindo'
+						vel = Twist(Vector3(0.1,0,0),Vector3(0,0,(280-centro[0])/200))
+					elif(centro[0] > 380):
+
+						vel = Twist(Vector3(0.1,0,0), Vector3(0,0,-(centro[0]-380)/200))
+					velocidade_saida.publish(vel)
+					return 'seguindo'
+		else:
+			return 'aprendendo'
 # main
 def main():
 	global velocidade_saida
@@ -295,10 +317,13 @@ def main():
 
 		smach.StateMachine.add('PROCURANDO', Procura(),
 								transitions={'girando': 'PROCURANDO',
-								'achou':'SEGUINDO'})
+								'achou':'SEGUINDO','aprendendo':'APRENDENDO'})
 		smach.StateMachine.add('SEGUINDO', Seguindo(),
 								transitions={'perdi': 'PROCURANDO',
-								'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO'})
+								'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO','aprendendo':'APRENDENDO'})
+		smach.StateMachine.add('APRENDENDO', aprendizado(),
+								transitions={'aprendendo': 'APRENDENDO',
+								'aprendi':'PROCURANDO'})
 
 
 	# Execute SMACH plan
