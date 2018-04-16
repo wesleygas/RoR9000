@@ -180,10 +180,10 @@ def vai(frame, contador):
 		fram2 = frame.copy()
 		if contadois != 0:
 			print("Entroooooooooooooooooooooooooooooooooooo")
-			if contadois%10 == 0:
+			if contadois%5 == 0:
 				obj.learnbackground(fram2)
 				print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
-			if contadois%100 == 0:
+			if contadois%15 == 0:
 				print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
 				obj.learnobject(fram2)
 				kp1, des1 = sift.detectAndCompute(obj.objeto,None)

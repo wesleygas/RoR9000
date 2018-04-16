@@ -17,12 +17,12 @@ class objetoo():
 
 	def crop_object(self,BG,objonBG):
 		img_get = cv2.subtract(BG,objonBG)
-		(idx,idy) = np.where((img_get[:,:,0] > 30) & (img_get[:,:,1] > 30) & (img_get[:,:,2] > 30))
+		(idx,idy) = np.where((img_get[:,:,0] > 50) & (img_get[:,:,1] > 50) & (img_get[:,:,2] > 50))
 		if len(idx) > 0 and len(idy) > 0:
 			(topx,topy) = (np.min(idx),np.min(idy))
 			(botx,boty) = (np.max(idx),np.max(idy))
-			difx = round((topx - botx)*0.1)
-			dify = round((topy - boty)*0.1)
+			difx = int(round((topx - botx)*0.05))
+			dify = int(round((topy - boty)*0.05))
 			topx -= difx
 			botx += difx
 			topy -= dify
