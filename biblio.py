@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 
-class objeto():
+class objetoo():
 
 	def __init__(self):
 		self.temobjeto = False
@@ -16,12 +16,18 @@ class objeto():
 		self.guds = []
 
 	def crop_object(self,BG,objonBG):
-		img_get = cv2.subtract(objonBG,BG)
+		img_get = cv2.subtract(BG,objonBG)
 		(idx,idy) = np.where((img_get[:,:,0] > 50) & (img_get[:,:,1] > 50) & (img_get[:,:,2] > 50))
 		if len(idx) > 0 and len(idy) > 0:
 			(topx,topy) = (np.min(idx),np.min(idy))
 			(botx,boty) = (np.max(idx),np.max(idy))
-			objonBG[(img_get[:,:,0] == 0) & (img_get[:,:,1] == 0) & (img_get[:,:,2] == 0)] = 0
+			difx = int(round((topx - botx)*0.05))
+			dify = int(round((topy - boty)*0.05))
+			topx -= difx
+			botx += difx
+			topy -= dify
+			boty += dify
+			# objonBG[(img_get[:,:,0] == 0) & (img_get[:,:,1] == 0) & (img_get[:,:,2] == 0)] = 0
 			return objonBG[topx:botx + 1, topy:boty + 1]
 		return objonBG
 
@@ -116,7 +122,7 @@ class objeto():
 # # 	(botx,boty) = (np.max(idx),np.max(idy))
 # # 	return objonBG[topx:botx + 1, topy:boty + 1]
 #
-# obj = objeto()
+# obj = objeto() 
 #
 # while True:
 #
