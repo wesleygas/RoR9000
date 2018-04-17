@@ -93,9 +93,9 @@ def vai(frame, contador):
 	global aprendendo
 	global contadois, des1,kp1, img1
 	contadois += 1
-	print("ENTRO")
-	print(contadois)
-	print(aprendendo)
+	# print("ENTRO")
+	# print(contadois)
+	# print(aprendendo)
 	# contadois += 1
 	if aprendendo == False:
 		global ok,tracker,tracker_type,bbox, des1,kp1, img1
@@ -157,8 +157,9 @@ def vai(frame, contador):
 					tracker, tracker_type = create_tracker()
 					ok = tracker.init(frame,bbox)
 				else:
-					print("IIhh rapah")
-				print(bbox)
+					pass
+				# 	print("IIhh rapah")
+				# print(bbox)
 				cv2.imshow("Tracking", frame)
 				#print(ok, "Qualqure")
 				#cv2.rectangle(frame, (minX,maxY), (maxX,minY), (255,0,0), 2, 1)
@@ -192,12 +193,12 @@ def vai(frame, contador):
 	else: # Read a new frame for 30 times
 		fram2 = frame.copy()
 		if contadois != 0:
-			print("Entroooooooooooooooooooooooooooooooooooo")
+			# print("Entroooooooooooooooooooooooooooooooooooo")
 			if contadois%1 == 0:
 				obj.learnbackground(fram2)
-				print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
+				# print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
 			if contadois%60 == 0:
-				print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
+				# print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
 				obj.learnobject(fram2)
 				kp1, des1 = sift.detectAndCompute(obj.objeto,None)
 				img1 = obj.objeto
@@ -219,7 +220,7 @@ def roda_todo_frame(imagem):
 	global objeto,kp1,des1
 	global bbox,contador,frame
 	global media_cor,centro,area,fuga
-	print("New Frame")
+	# print("New Frame")
 	now = rospy.get_rostime()
 	imgtime = imagem.header.stamp
 	lag = now-imgtime
@@ -234,7 +235,7 @@ def roda_todo_frame(imagem):
 
 		media_cor, area = cormodule.identifica_cor(frame_cor)
 
-		print(area)
+		# print(area)
 		if area > 14000:
 			fuga = True
 		else:
@@ -265,6 +266,7 @@ def scaneou(dado):
 	global mini
 	global desvia
 	global minimo
+	print(desvia)
 	mini = [dado.range_max, 0]
 	lelescan=np.array(dado.ranges).round(decimals=2)
 	for i in range(len(lelescan)):
@@ -282,6 +284,7 @@ def leu_imu(dado):
 	global media
 	global diff
 	global i
+	# print(bateu)
 	quat = dado.orientation
 	lista = [quat.x, quat.y, quat.z, quat.w]
 	angulos = np.degrees(transformations.euler_from_quaternion(lista))
@@ -298,14 +301,13 @@ def leu_imu(dado):
 	diff = abs(crash[-1] - media)
 	if diff >= 3.5:
 		bateu = True
-	else:
-		bateu = False
+
 
 def tempo_de_batida(t = None):
 	global tmp
 	if t == None:
 		if float(tmp - rospy.get_rostime().secs )<= 0:
-			print ("1")
+			# print ("1")
 			return False
 	else:
 		tmp = rospy.get_rostime().secs
@@ -314,6 +316,7 @@ def tempo_de_batida(t = None):
 
 def Bateu(angulo,diff):
 	global bateu
+	# print("Bateu")
 	if angulo>=100:
 		velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
 		velocidade_saida.publish(velocidade)
@@ -397,8 +400,10 @@ class Procura(smach.State):
 
 
 	def execute(self, userdata):
-		global velocidade_saida,bbox,centro,area
-
+		global velocidade_saida,bbox,centro,area,bateu
+		if bateu:
+			Bateu(angulo,diff)
+			bateu = False
 		rospy.sleep(0.01)
 		if aprendendo == False:
 			if desvia:
@@ -423,10 +428,14 @@ class Fugindo(smach.State):
 		smach.State.__init__(self,outcomes=['fugi','fugindo','aprendendo','sobreviva'])
 
 	def execute(self, userdata):
-		global media_cor,area,fuga,velocidade_saida
+		global media_cor,area,fuga,velocidade_saida,bateu
 		if aprendendo == False:
 			if desvia:
 				return 'sobreviva'
+
+			if bateu:
+				Bateu(angulo,diff)
+				bateu = False
 			x = media_cor[0]
 			y = media_cor[1]
 			rospy.sleep(0.01)
@@ -456,29 +465,31 @@ class Seguindo(smach.State):
 		smach.State.__init__(self, outcomes=['fugindo','seguindo','aprendendo', 'cheguei', 'perdi','sobreviva'])
 
 	def execute(self, userdata):
-		global velocidade_saida,bbox
+		global velocidade_saida,bbox,bateu
 		if aprendendo:
 			return 'aprendendo'
-
+		if bateu:
+			Bateu(angulo,diff)
+			bateu = False
 		if desvia:
 			return 'sobreviva'
 		if(fuga == True):
 			return 'fugindo'
 
 		rospy.sleep(0.01)
-		print bbox
+		# print bbox
 		if bbox == (0,0,0,0):
 			return 'perdi'
 		else:
 			centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
 
 			if(bbox[-1] > 300):
-				print("And now we rest",bbox[-1])
+				# print("And now we rest",bbox[-1])
 				vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
 				velocidade_saida.publish(vel)
 				return 'cheguei'
 			else:
-				print("Foward we gooo!")
+				# print("Foward we gooo!")
 				vel = Twist(Vector3(0.5,0,0),Vector3(0,0,-(centro[0]-320)/300))
 				if(centro[0] < 280):
 
