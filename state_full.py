@@ -193,10 +193,10 @@ def vai(frame, contador):
 		fram2 = frame.copy()
 		if contadois != 0:
 			print("Entroooooooooooooooooooooooooooooooooooo")
-			if contadois%10 == 0:
+			if contadois%1 == 0:
 				obj.learnbackground(fram2)
 				print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
-			if contadois%40 == 0:
+			if contadois%60 == 0:
 				print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
 				obj.learnobject(fram2)
 				kp1, des1 = sift.detectAndCompute(obj.objeto,None)
@@ -235,7 +235,7 @@ def roda_todo_frame(imagem):
 		media_cor, area = cormodule.identifica_cor(frame_cor)
 
 		print(area)
-		if area > 11000:
+		if area > 14000:
 			fuga = True
 		else:
 			fuga = False
@@ -254,6 +254,7 @@ mini = [10, 0]
 angulo = 0
 bateu = False
 desvia = False
+minimo = 0.3
 tmp = 0
 crash = []
 media = 0
@@ -263,6 +264,7 @@ i = 0
 def scaneou(dado):
 	global mini
 	global desvia
+	global minimo
 	mini = [dado.range_max, 0]
 	lelescan=np.array(dado.ranges).round(decimals=2)
 	for i in range(len(lelescan)):
@@ -270,8 +272,8 @@ def scaneou(dado):
 			pass
 			if mini[0] > lelescan[i]:
 				mini = [lelescan[i],i]
- 	if mini[0]<0.3:
-		desvia = True
+ 	if mini[0]<minimo:########ftfufutf
+		desvia=True
 
 def leu_imu(dado):
 	global angulo
@@ -294,7 +296,7 @@ def leu_imu(dado):
 	angulo =math.degrees(math.atan2(dado.linear_acceleration.x , dado.linear_acceleration.y))
 	media = np.mean(crash)
 	diff = abs(crash[-1] - media)
-	if diff >= 4.5:
+	if diff >= 3.5:
 		bateu = True
 	else:
 		bateu = False
@@ -343,26 +345,29 @@ def Dont(dire):
 def desviando(mini):
 	global bateu
 	global desvia
-
 	if bateu:
 		Bateu(angulo,diff)
 		bateu = False
+	if desvia:
+		if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
+			Dont(0)
+			desvia=True
 
-	if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
-		Dont(0)
+		if (mini[1] <= 360 and mini[1] > 288):
+			Dont(1)
+			desvia=True
 
-	if (mini[1] <= 360 and mini[1] > 288):
-		Dont(1)
-
-	elif (mini[1] < 72 and mini[1] >= 0):
-		Dont(-1)
+		elif (mini[1] < 72 and mini[1] >= 0):
+			Dont(-1)
+			desvia=True
+		else:
+			desvia=False
 
 	if desvia:
 		return "sobreviva"
-
 	else:
-		desvia = False
 		return "ufa"
+
 
 #----------------------------------------------------------------------------------------------------
 
@@ -426,7 +431,7 @@ class Fugindo(smach.State):
 			y = media_cor[1]
 			rospy.sleep(0.01)
 
-			if area < 5000:
+			if area < 10000:
 				fuga = False
 				return 'fugi'
 			else:
