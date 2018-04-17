@@ -234,6 +234,7 @@ i = 0
 
 def scaneou(dado):
 	global mini
+	global desvia
 	mini = [dado.range_max, 0]
 	lelescan=np.array(dado.ranges).round(decimals=2)
 	for i in range(len(lelescan)):
@@ -241,7 +242,8 @@ def scaneou(dado):
 			pass
 			if mini[0] > lelescan[i]:
 				mini = [lelescan[i],i]
-	#print (len(lelescan))
+ 	if mini[0]<0.3:
+		desvia = True
 
 def leu_imu(dado):
 	global angulo
@@ -264,6 +266,10 @@ def leu_imu(dado):
 	angulo =math.degrees(math.atan2(dado.linear_acceleration.x , dado.linear_acceleration.y))
 	media = np.mean(crash)
 	diff = abs(crash[-1] - media)
+	if diff >= 3.5:	
+		bateu = True
+	else:
+		bateu = False
 	
 def tempo_de_batida(t = None):
 	global tmp
@@ -277,30 +283,23 @@ def tempo_de_batida(t = None):
 		return True
 
 def Bateu(angulo,diff):
-	#velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
-	#velocidade_saida.publish(velocidade)
-	#rospy.sleep(0.5)
-	if diff >= 3.5:	
-		if angulo>=100:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(1.5)
-		elif angulo >80 and angulo < 100:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(2)
+	global bateu
+	if angulo>=100:
+		velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
+		velocidade_saida.publish(velocidade)
+		tempo_de_batida(1.5)
+	elif angulo >80 and angulo < 100:
+		velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
+		velocidade_saida.publish(velocidade)
+		tempo_de_batida(2)
 
-		elif angulo <=80:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, -2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(1.5)
+	elif angulo <=80:
+		velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, -2))
+		velocidade_saida.publish(velocidade)
+		tempo_de_batida(1.5)
 
 
-	
-def GonnaCrash(mini):
-	global desvia
-	desvia = True
-	return mini[0]<0.3
+
 
 def Dont(dire):
 	if (dire==0):
@@ -315,18 +314,24 @@ def Dont(dire):
 
 def desviando(mini):
 	global bateu
-	if GonnaCrash(mini):
-		if bateu:
-			Bateu(angulo,diff)
-			bateu = False
-		elif not tempo_de_batida():
-			if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
-				Dont(0)
-			if (mini[1] <= 360 and mini[1] > 288):
-				Dont(1)
-			elif (mini[1] < 72 and mini[1] >= 0):
-				Dont(-1)
+	global desvia
+	
+	if bateu:
+		Bateu(angulo,diff)
+		bateu = False
+	
+	if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
+		Dont(0)
+	
+	if (mini[1] <= 360 and mini[1] > 288):
+		Dont(1)
+	
+	elif (mini[1] < 72 and mini[1] >= 0):
+		Dont(-1)
+	
+	if desvia:	
 		return "sobreviva"
+	
 	else:
 		desvia = False
 		return "ufa"
@@ -345,7 +350,7 @@ class Procura(smach.State):
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox,centro,area
-		if GonnaCrash(mini):
+		if desvia:
 			return 'sobreviva'
 		rospy.sleep(0.01)
 
@@ -368,13 +373,13 @@ class Fugindo(smach.State):
 
 	def execute(self, userdata):
 		global media_cor,area,fuga,velocidade_saida
-		if GonnaCrash(mini):
+		if desvia:
 			return 'sobreviva'
 		x = media_cor[0]
 		y = media_cor[1]
 		rospy.sleep(0.01)
 
-		if area < 8000:
+		if area < 5000:
 			fuga = False
 			return 'fugi'
 		else:
@@ -399,7 +404,7 @@ class Seguindo(smach.State):
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox
-		if GonnaCrash(mini):
+		if desvia:
 			return 'sobreviva'
 		if(fuga == True):
 			return 'fugindo'
