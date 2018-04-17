@@ -17,7 +17,7 @@ from sensor_msgs.msg import Imu
 import transformations
 import smach
 import smach_ros
-import biblio
+import biblio as bib
 
 import cormodule
 
@@ -32,7 +32,6 @@ aprendeu = 0
 start = 0
 delay = 2e9
 frame = None
-objeto = biblio.objetoo()
 
 ## Flags ####
 fuga = False
@@ -85,102 +84,131 @@ tracker,tracker_type = create_tracker()
 
 #Primeiras coordenadas da Bounding box (manualmente)
 bbox = (0, 0, 0, 0) #Caixa inicial((topo esquerdo),largura,altura)
+aprendendo = True
+contadois = 0
+obj = bib.objetoo()
+
 
 def vai(frame, contador):
+	global aprendendo
+	global contadois, des1,kp1, img1
+	contadois += 1
+	print("ENTRO")
+	print(contadois)
+	print(aprendendo)
+	# contadois += 1
+	if aprendendo == False:
+		global ok,tracker,tracker_type,bbox, des1,kp1, img1
 
-	global ok,tracker,tracker_type,bbox,kp1,des1
+		if(contador == 0): #Every time the counter gets reset Try to find the café extra forte
+			# Copy the image to leave the colored one to be used as output
+			frame_gray = frame.copy()
+			# Convert the frame to grayscale
+			frame_gray = cv2.cvtColor(frame_gray, cv2.COLOR_BGR2GRAY)
 
-	if(contador == 0): #Every time the counter gets reset Try to find the café extra forte
-		# Copy the image to leave the colored one to be used as output
-		frame_gray = frame.copy()
-		# Convert the frame to grayscale
-		frame_gray = cv2.cvtColor(frame_gray, cv2.COLOR_BGR2GRAY)
+			#Actual sift run
+			kp2, des2 = sift.detectAndCompute(frame_gray,None)
+			FLANN_INDEX_KDTREE = 0
+			index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
+			search_params = dict(checks = 50)
+			# Configura o algoritmo de casamento de features
+			flann = cv2.FlannBasedMatcher(index_params, search_params)
+			# Tenta fazer a melhor comparacao usando o algoritmo
+			matches = flann.knnMatch(des1,des2,k=2)
+			# store all the good matches as per Lowe's ratio test.
+			good = []
+			for m,n in matches:
+				if m.distance < 0.7*n.distance:
+					good.append(m)
+			if len(good)>MIN_MATCH_COUNT:
 
-		#Actual sift run
-		kp2, des2 = sift.detectAndCompute(frame_gray,None)
-		FLANN_INDEX_KDTREE = 0
-		index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-		search_params = dict(checks = 50)
-		# Configura o algoritmo de casamento de features
-		flann = cv2.FlannBasedMatcher(index_params, search_params)
-		# Tenta fazer a melhor comparacao usando o algoritmo
-		matches = flann.knnMatch(des1,des2,k=2)
-		# store all the good matches as per Lowe's ratio test.
-		good = []
-		for m,n in matches:
-			if m.distance < 0.7*n.distance:
-				good.append(m)
-		if len(good)>MIN_MATCH_COUNT:
-
-			font = cv2.FONT_HERSHEY_SIMPLEX
-			src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-			dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+				font = cv2.FONT_HERSHEY_SIMPLEX
+				src_pts = np.float32([ kp1[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
+				dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
 
 
-			# Tenta achar uma trasformacao composta de rotacao, translacao e escala que situe uma imagem na outra
-			M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
-			#Transforma-os em pontos no espaço
-			h,w = img1.shape
-			pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+				# Tenta achar uma trasformacao composta de rotacao, translacao e escala que situe uma imagem na outra
+				M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+				#Transforma-os em pontos no espaço
+				h,w,_ = img1.shape
+				pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
 
-			# Transforma os pontos da imagem origem para onde estao na imagem destino
-			dst = np.int32(cv2.perspectiveTransform(pts,M))
-			# Desenha as linhas
-			#cv2.polylines(frame,dst,True,(0,0,255),3, cv2.LINE_AA)
-			#desenha o centro do polígono
-			#top_left = dst[0][0]
-			#top_right = dst[3][0]
-			#bot_right = dst[2][0]
-			#bot_left = dst[1][0]
-			all_x = dst[:,0,0]
-			all_y = dst[:,0,1]
-			maxY = np.max(all_y)
-			minY = np.min(all_y)
+				# Transforma os pontos da imagem origem para onde estao na imagem destino
+				dst = np.int32(cv2.perspectiveTransform(pts,M))
+				# Desenha as linhas
+				#cv2.polylines(frame,dst,True,(0,0,255),3, cv2.LINE_AA)
+				#desenha o centro do polígono
+				#top_left = dst[0][0]
+				#top_right = dst[3][0]
+				#bot_right = dst[2][0]
+				#bot_left = dst[1][0]
+				all_x = dst[:,0,0]
+				all_y = dst[:,0,1]
+				maxY = np.max(all_y)
+				minY = np.min(all_y)
 
-			maxX = np.max(all_x)
-			minX = np.min(all_x)
+				maxX = np.max(all_x)
+				minX = np.min(all_x)
 
-			cv2.circle(frame, (minX,minY), 15, (0, 255, 0), 6)
-			cv2.circle(frame,(maxX,maxY) , 15, (255, 0, 255), 6)
-			if((maxX-minX)> 15 and (maxY-minY)>15):
-				bbox = (minX,minY,(maxX-minX),(maxY-minY))
-				tracker, tracker_type = create_tracker()
-				ok = tracker.init(frame,bbox)
-			else:
-				print("IIhh rapah")
-			print(bbox)
+				cv2.circle(frame, (minX,minY), 15, (0, 255, 0), 6)
+				cv2.circle(frame,(maxX,maxY) , 15, (255, 0, 255), 6)
+				if((maxX-minX)> 15 and (maxY-minY)>15):
+					bbox = (minX,minY,(maxX-minX),(maxY-minY))
+					tracker, tracker_type = create_tracker()
+					ok = tracker.init(frame,bbox)
+				else:
+					print("IIhh rapah")
+				print(bbox)
+				cv2.imshow("Tracking", frame)
+				#print(ok, "Qualqure")
+				#cv2.rectangle(frame, (minX,maxY), (maxX,minY), (255,0,0), 2, 1)
+				pol_y = np.int32((dst[1][0][1] - dst[0][0][1])/2 + dst[0][0][1])
+				pol_x = np.int32((dst[3][0][1] - dst[0][0][0])/2 + dst[0][0][1])
+		else:
+			if ok:
+				ok, bbox = tracker.update(frame)
+				# Draw bounding box
+				if ok:
+					# Tracking success
+					p1 = (int(bbox[0]), int(bbox[1]))
+					p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
+					cv2.rectangle(frame, p1, p2, (0,255,0), 3, 3)
+					#Bota um circulo no centro da box
+					coordx = int(p2[0]+((p1[0]-p2[0])/2))
+					coordy = int(p2[1]+(p1[1]-p2[1])/2)
+					cv2.circle(frame,(coordx,coordy),2,(255,0,0),1)
+				else :
+					# Tracking failure
+					cv2.putText(frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
+					bbox = (0,0,0,0)
+
+			# Display result
 			cv2.imshow("Tracking", frame)
-			#print(ok, "Qualqure")
-			#cv2.rectangle(frame, (minX,maxY), (maxX,minY), (255,0,0), 2, 1)
-			pol_y = np.int32((dst[1][0][1] - dst[0][0][1])/2 + dst[0][0][1])
-			pol_x = np.int32((dst[3][0][1] - dst[0][0][0])/2 + dst[0][0][1])
+			k = cv2.waitKey(1) & 0xff
+			if k == 27 :
+				cap.release()
+				cv2.destroyAllWindows()
 
 	else: # Read a new frame for 30 times
-
-		if ok:
-			ok, bbox = tracker.update(frame)
-			# Draw bounding box
-			if ok:
-				# Tracking success
-				p1 = (int(bbox[0]), int(bbox[1]))
-				p2 = (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3]))
-				cv2.rectangle(frame, p1, p2, (0,255,0), 3, 3)
-				#Bota um circulo no centro da box
-				coordx = int(p2[0]+((p1[0]-p2[0])/2))
-				coordy = int(p2[1]+(p1[1]-p2[1])/2)
-				cv2.circle(frame,(coordx,coordy),2,(255,0,0),1)
-			else :
-				# Tracking failure
-				cv2.putText(frame, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
-				bbox = (0,0,0,0)
-
-		# Display result
+		fram2 = frame.copy()
+		if contadois != 0:
+			print("Entroooooooooooooooooooooooooooooooooooo")
+			if contadois%10 == 0:
+				obj.learnbackground(fram2)
+				print("AGHAGHAGHGAHGHAGHGAHHAAHGHAGHAHAA")
+			if contadois%40 == 0:
+				print("GAKLJGHEYRWFBUVALDVB,RQ EUY ELVACD")
+				obj.learnobject(fram2)
+				kp1, des1 = sift.detectAndCompute(obj.objeto,None)
+				img1 = obj.objeto
+				cv2.imshow("objetp",obj.objeto)
+				aprendendo = False
 		cv2.imshow("Tracking", frame)
-
 		k = cv2.waitKey(1) & 0xff
 		if k == 27 :
 			cap.release()
 			cv2.destroyAllWindows()
+
 
 
 
@@ -266,11 +294,11 @@ def leu_imu(dado):
 	angulo =math.degrees(math.atan2(dado.linear_acceleration.x , dado.linear_acceleration.y))
 	media = np.mean(crash)
 	diff = abs(crash[-1] - media)
-	if diff >= 3.5:	
+	if diff >= 4.5:
 		bateu = True
 	else:
 		bateu = False
-	
+
 def tempo_de_batida(t = None):
 	global tmp
 	if t == None:
@@ -315,23 +343,23 @@ def Dont(dire):
 def desviando(mini):
 	global bateu
 	global desvia
-	
+
 	if bateu:
 		Bateu(angulo,diff)
 		bateu = False
-	
+
 	if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
 		Dont(0)
-	
+
 	if (mini[1] <= 360 and mini[1] > 288):
 		Dont(1)
-	
+
 	elif (mini[1] < 72 and mini[1] >= 0):
 		Dont(-1)
-	
-	if desvia:	
+
+	if desvia:
 		return "sobreviva"
-	
+
 	else:
 		desvia = False
 		return "ufa"
@@ -341,58 +369,78 @@ def desviando(mini):
 
 
 ## Classes - estados
+class aprendizado(smach.State):
+	def __init__(self):
+		smach.State.__init__(self, outcomes=['aprendendo', 'aprendi'])
 
+
+	def execute(self, userdata):
+		global velocidade_saida,bbox
+
+		rospy.sleep(0.5)
+
+		if aprendendo == True:
+			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
+			velocidade_saida.publish(vel)
+			return 'aprendendo'
+		else:
+			return 'aprendi'
 
 class Procura(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['achou', 'girando','fugindo','sobreviva'])
+		smach.State.__init__(self, outcomes=['achou', 'girando','aprendendo','fugindo','sobreviva'])
 
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox,centro,area
-		if desvia:
-			return 'sobreviva'
+
 		rospy.sleep(0.01)
+		if aprendendo == False:
+			if desvia:
+				return 'sobreviva'
 
-		if(fuga == True):
-			return 'fugindo'
+			if(fuga == True):
+				return 'fugindo'
 
-		if bbox == (0,0,0,0):
-			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.3))
-			velocidade_saida.publish(vel)
-			return 'girando'
+			if bbox == (0,0,0,0):
+				vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, -0.3))
+				velocidade_saida.publish(vel)
+				return 'girando'
+			else:
+				vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
+				velocidade_saida.publish(vel)
+				return 'achou'
 		else:
-			vel = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
-			velocidade_saida.publish(vel)
-			return 'achou'
-
+			return 'aprendendo'
 
 class Fugindo(smach.State):
 	def __init__(self):
-		smach.State.__init__(self,outcomes=['fugi','fugindo','sobreviva'])
+		smach.State.__init__(self,outcomes=['fugi','fugindo','aprendendo','sobreviva'])
 
 	def execute(self, userdata):
 		global media_cor,area,fuga,velocidade_saida
-		if desvia:
-			return 'sobreviva'
-		x = media_cor[0]
-		y = media_cor[1]
-		rospy.sleep(0.01)
+		if aprendendo == False:
+			if desvia:
+				return 'sobreviva'
+			x = media_cor[0]
+			y = media_cor[1]
+			rospy.sleep(0.01)
 
-		if area < 5000:
-			fuga = False
-			return 'fugi'
+			if area < 5000:
+				fuga = False
+				return 'fugi'
+			else:
+				#print("caaarefulling!")
+				vel = Twist(Vector3(-0.5,0,0),Vector3(0,0,-(x-320)/300))
+				if(x < 280):
+					vel = Twist(Vector3(-0.1,0,0),Vector3(0,0,(280-x)/200))
+				elif(x > 380):
+					vel = Twist(Vector3(-0.1,0,0), Vector3(0,0,-(x-380)/200))
+
+				velocidade_saida.publish(vel)
+				return 'fugindo'
 		else:
-			#print("caaarefulling!")
-			vel = Twist(Vector3(-0.5,0,0),Vector3(0,0,-(x-320)/300))
-			if(x < 280):
-				vel = Twist(Vector3(-0.1,0,0),Vector3(0,0,(280-x)/200))
-			elif(x > 380):
-				vel = Twist(Vector3(-0.1,0,0), Vector3(0,0,-(x-380)/200))
-
-			velocidade_saida.publish(vel)
-			return 'fugindo'
-
+			return 'aprendendo'
 
 
 
@@ -400,10 +448,13 @@ class Fugindo(smach.State):
 
 class Seguindo(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['fugindo','seguindo', 'cheguei', 'perdi','sobreviva'])
+		smach.State.__init__(self, outcomes=['fugindo','seguindo','aprendendo', 'cheguei', 'perdi','sobreviva'])
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox
+		if aprendendo:
+			return 'aprendendo'
+
 		if desvia:
 			return 'sobreviva'
 		if(fuga == True):
@@ -437,12 +488,14 @@ class Seguindo(smach.State):
 
 class Survival(smach.State):
     def __init__(self):
-        smach.State.__init__(self, outcomes=['sobreviva','ufa'])
-
+        smach.State.__init__(self, outcomes=['sobreviva','ufa', 'aprendendo'])
 
     def execute(self, userdata):
-	rospy.sleep(0.01)
-	return desviando(mini)
+
+		rospy.sleep(0.01)
+		if aprendendo:
+			return 'aprendendo'
+		return desviando(mini)
 
 # main
 def main():
@@ -460,8 +513,8 @@ def main():
 	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
 	recebe_scan = rospy.Subscriber("/scan", LaserScan, scaneou)
 	recebe_scan2 = rospy.Subscriber("/imu", Imu, leu_imu, queue_size =1)
-	
-	
+
+
 	# Create a SMACH state machine
 	sm = smach.StateMachine(outcomes=['terminei'])
 
@@ -469,17 +522,20 @@ def main():
 	with sm:
 
 
+		smach.StateMachine.add('APRENDENDO', aprendizado(),
+								transitions={'aprendendo': 'APRENDENDO',
+								'aprendi':'PROCURANDO'})
 		smach.StateMachine.add('PROCURANDO', Procura(),
-								transitions={'girando': 'PROCURANDO',
+								transitions={'aprendendo': 'APRENDENDO','girando': 'PROCURANDO',
 								'achou':'SEGUINDO', 'fugindo':'FUGINDO','sobreviva':'SOBREVIVA'})
 		smach.StateMachine.add('SEGUINDO', Seguindo(),
-								transitions={'perdi': 'PROCURANDO',
+								transitions={'aprendendo': 'APRENDENDO','perdi': 'PROCURANDO',
 								'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO','fugindo':'FUGINDO','sobreviva':'SOBREVIVA'})
 		smach.StateMachine.add('FUGINDO', Fugindo(),
-								transitions={'fugindo': 'FUGINDO',
+								transitions={'aprendendo': 'APRENDENDO','fugindo': 'FUGINDO',
 								'fugi':'PROCURANDO','sobreviva':'SOBREVIVA'})
 		smach.StateMachine.add('SOBREVIVA', Survival(),
-	                            transitions={'sobreviva':'SOBREVIVA','ufa': 'PROCURANDO'})
+	                            transitions={'aprendendo': 'APRENDENDO','sobreviva':'SOBREVIVA','ufa': 'PROCURANDO'})
 
 	# Execute SMACH plan
 	outcome = sm.execute()
