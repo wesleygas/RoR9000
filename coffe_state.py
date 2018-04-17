@@ -12,11 +12,9 @@ from geometry_msgs.msg import Twist, Vector3, Pose
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
-from sensor_msgs.msg import LaserScan
-from sensor_msgs.msg import Imu
-import transformations
 import smach
 import smach_ros
+import survival as su
 
 
 bridge = CvBridge()
@@ -33,6 +31,7 @@ tolerancia_y = 20
 ang_speed = 0.4
 area_ideal = 60000 # área da distancia ideal do contorno - note que varia com a resolução da câmera
 tolerancia_area = 20000
+
 # Atraso máximo permitido entre a imagem sair do Turbletbot3 e chegar no laptop do aluno
 atraso = 0.5E9
 check_delay =False # Só usar se os relógios ROS da Raspberry e do Linux desktop estiverem sincronizados
@@ -49,18 +48,6 @@ ok = True
 
 #------------ Configuracao do tracker -------------
 #Seleciona o tipo de tracking algorithm
-
-def scaneou(dado):
-	global mini
-	mini = [dado.range_max, 0]
-	lelescan=np.array(dado.ranges).round(decimals=2)
-	for i in range(len(lelescan)):
-		if lelescan[i] >= dado.range_min:
-			pass
-			if mini[0] > lelescan[i]:
-				mini = [lelescan[i],i]
-	#print (len(lelescan))
-
 def create_tracker():
 	tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW', 'GOTURN']
 	tracker_type = tracker_types[4]
@@ -81,107 +68,6 @@ def create_tracker():
 
 tracker,tracker_type = create_tracker()
 
-# --------------------------------Survival---------------------------------------------------
-
-mini = [10, 0]
-velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
-angulo = 0
-bateu = False
-desvia = False
-tmp = 0
-crash = []
-media = 0
-diff = 0
-i = 0
-def leu_imu(dado):
-	global angulo
-	global  crash
-	global bateu
-	global media
-	global diff
-	global i
-	quat = dado.orientation
-	lista = [quat.x, quat.y, quat.z, quat.w]
-	angulos = np.degrees(transformations.euler_from_quaternion(lista))
-	if len(crash) < 5 :
-		crash.append(dado.linear_acceleration.x)
-	else:
-		crash[i] = dado.linear_acceleration.x
-		#print(crash)
-		i += 1
-		if i == 4:
-			i = 0
-	angulo =math.degrees(math.atan2(dado.linear_acceleration.x , dado.linear_acceleration.y))
-	media = np.mean(crash)
-	diff = abs(crash[-1] - media)
-	
-def tempo_de_batida(t = None):
-	global tmp
-	if t == None:
-		if float(tmp - rospy.get_rostime().secs )<= 0:
-			print ("1")
-			return False
-	else:
-		tmp = rospy.get_rostime().secs
-		rospy.sleep(t)
-		return True
-
-def Bateu(angulo,diff):
-	#velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
-	#velocidade_saida.publish(velocidade)
-	#rospy.sleep(0.5)
-	if diff >= 3.5:	
-		if angulo>=100:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(1.5)
-		elif angulo >80 and angulo < 100:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(2)
-
-		elif angulo <=80:
-			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, -2))
-			velocidade_saida.publish(velocidade)
-			tempo_de_batida(1.5)
-	
-
-	
-def GonnaCrash(mini):
-	global desvia
-	desvia = True
-	return mini[0]<0.3
-
-def Dont(dire):
-	if (dire==0):
-		velocidade = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
-		velocidade_saida.publish(velocidade)
-		rospy.sleep(0.3)
-	velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
-	velocidade_saida.publish(velocidade)
-	rospy.sleep(0.3)
-
-
-
-def desviando(mini):
-	global bateu
-	if GonnaCrash(mini):
-		if bateu:
-			Bateu(angulo,diff)
-			bateu = False
-		elif not tempo_de_batida():
-			if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
-				Dont(0)
-			if (mini[1] <= 360 and mini[1] > 288):
-				Dont(1)
-			elif (mini[1] < 72 and mini[1] >= 0):
-				Dont(-1)
-		return "sobreviva"
-	else:
-		desvia = False
-		return "ufa"
-
-#----------------------------------------------------------------------------------------------------
 
 #Primeiras coordenadas da Bounding box (manualmente)
 bbox = (0, 0, 0, 0) #Caixa inicial((topo esquerdo),largura,altura)
@@ -283,10 +169,7 @@ def vai(frame, contador):
 			cv2.destroyAllWindows()
 
 
-def GonnaCrash(mini):
-	global desvia
-	desvia = True
-	return mini[0]<0.3
+
 
 
 def roda_todo_frame(imagem):
@@ -326,7 +209,7 @@ class Procura(smach.State):
     def execute(self, userdata):
 		global velocidade_saida,bbox
 		
-		if GonnaCrash(mini):
+		if su.desvia(su.mini):
 			return 'sobreviva'
 		rospy.sleep(0.01)
 
@@ -347,7 +230,7 @@ class Seguindo(smach.State):
     def execute(self, userdata):
 		global velocidade_saida,bbox
 		rospy.sleep(0.01)
-		if GonnaCrash(mini):
+		if su.desvia(su.mini):
 			return 'sobreviva'
 		print bbox
 		if bbox == (0,0,0,0):
@@ -355,7 +238,7 @@ class Seguindo(smach.State):
 		else:
 			centro = ((bbox[0] + bbox[2]/2),(bbox[1]+ bbox[-1]/2))
 
-			if(bbox[-1] > 200):
+			if(bbox[-1] > 300):
 				print("And now we rest",bbox[-1])
 				vel = Twist(Vector3(0,0,0),Vector3(0,0,0))
 				velocidade_saida.publish(vel)
@@ -378,8 +261,8 @@ class Survival(smach.State):
 
 
     def execute(self, userdata):
+	su.desviando(su.mini)
 	rospy.sleep(0.01)
-	return desviando(mini)
 
 # main
 def main():
@@ -391,8 +274,8 @@ def main():
 	#recebedor = rospy.Subscriber("/cv_camera/image_raw/compressed", CompressedImage, roda_todo_frame, queue_size=1, buff_size = 2**24)
 	recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, roda_todo_frame, queue_size=10, buff_size = 2**24)
 	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
-	recebe_scan = rospy.Subscriber("/scan", LaserScan, scaneou)
-	recebe_scan2 = rospy.Subscriber("/imu", Imu, leu_imu, queue_size =1)
+	recebe_scan = rospy.Subscriber("/scan", LaserScan, su.scaneou)
+	recebe_scan2 = rospy.Subscriber("/imu", Imu, su.leu_imu, queue_size =1)
 
 	# Create a SMACH state machine
 	sm = smach.StateMachine(outcomes=['terminei'])
@@ -402,10 +285,10 @@ def main():
 
 	   	smach.StateMachine.add('PROCURANDO', Procura(),
 	                            transitions={'girando': 'PROCURANDO',
-	                            'achou':'SEGUINDO','sobreviva':'SOBREVIVA'})
+	                            'achou':'SEGUINDO','ufa':'PROCURANDO','sobreviva':})
 	   	smach.StateMachine.add('SEGUINDO', Seguindo(),
 	                            transitions={'perdi': 'PROCURANDO',
-	                            'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO','sobreviva':'SOBREVIVA'})
+	                            'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO'})
 
 		smach.StateMachine.add('SOBREVIVA', Survival(),
 	                            transitions={'sobreviva':'SOBREVIVA','ufa': 'PROCURANDO'})

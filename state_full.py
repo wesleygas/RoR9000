@@ -12,6 +12,9 @@ from geometry_msgs.msg import Twist, Vector3, Pose
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image, CompressedImage
 from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Imu
+import transformations
 import smach
 import smach_ros
 import biblio
@@ -34,7 +37,7 @@ objeto = biblio.objetoo()
 ## Flags ####
 fuga = False
 
-media = []
+media_cor = []
 centro = []
 area = 0.0
 
@@ -187,7 +190,7 @@ def roda_todo_frame(imagem):
 
 	global objeto,kp1,des1
 	global bbox,contador,frame
-	global media,centro,area,fuga
+	global media_cor,centro,area,fuga
 	print("New Frame")
 	now = rospy.get_rostime()
 	imgtime = imagem.header.stamp
@@ -201,7 +204,7 @@ def roda_todo_frame(imagem):
 		frame = bridge.compressed_imgmsg_to_cv2(imagem, "bgr8")
 		frame_cor = frame.copy()
 
-		media, area = cormodule.identifica_cor(frame_cor)
+		media_cor, area = cormodule.identifica_cor(frame_cor)
 
 		print(area)
 		if area > 11000:
@@ -217,6 +220,118 @@ def roda_todo_frame(imagem):
 
 
 
+# --------------------------------Survival---------------------------------------------------
+
+mini = [10, 0]
+angulo = 0
+bateu = False
+desvia = False
+tmp = 0
+crash = []
+media = 0
+diff = 0
+i = 0
+
+def scaneou(dado):
+	global mini
+	mini = [dado.range_max, 0]
+	lelescan=np.array(dado.ranges).round(decimals=2)
+	for i in range(len(lelescan)):
+		if lelescan[i] >= dado.range_min:
+			pass
+			if mini[0] > lelescan[i]:
+				mini = [lelescan[i],i]
+	#print (len(lelescan))
+
+def leu_imu(dado):
+	global angulo
+	global  crash
+	global bateu
+	global media
+	global diff
+	global i
+	quat = dado.orientation
+	lista = [quat.x, quat.y, quat.z, quat.w]
+	angulos = np.degrees(transformations.euler_from_quaternion(lista))
+	if len(crash) < 5 :
+		crash.append(dado.linear_acceleration.x)
+	else:
+		crash[i] = dado.linear_acceleration.x
+		#print(crash)
+		i += 1
+		if i == 4:
+			i = 0
+	angulo =math.degrees(math.atan2(dado.linear_acceleration.x , dado.linear_acceleration.y))
+	media = np.mean(crash)
+	diff = abs(crash[-1] - media)
+	
+def tempo_de_batida(t = None):
+	global tmp
+	if t == None:
+		if float(tmp - rospy.get_rostime().secs )<= 0:
+			print ("1")
+			return False
+	else:
+		tmp = rospy.get_rostime().secs
+		rospy.sleep(t)
+		return True
+
+def Bateu(angulo,diff):
+	#velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0))
+	#velocidade_saida.publish(velocidade)
+	#rospy.sleep(0.5)
+	if diff >= 3.5:	
+		if angulo>=100:
+			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
+			velocidade_saida.publish(velocidade)
+			tempo_de_batida(1.5)
+		elif angulo >80 and angulo < 100:
+			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, 2))
+			velocidade_saida.publish(velocidade)
+			tempo_de_batida(2)
+
+		elif angulo <=80:
+			velocidade = Twist(Vector3(-2, 0, 0), Vector3(0, 0, -2))
+			velocidade_saida.publish(velocidade)
+			tempo_de_batida(1.5)
+
+
+	
+def GonnaCrash(mini):
+	global desvia
+	desvia = True
+	return mini[0]<0.3
+
+def Dont(dire):
+	if (dire==0):
+		velocidade = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
+		velocidade_saida.publish(velocidade)
+		rospy.sleep(0.3)
+	velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
+	velocidade_saida.publish(velocidade)
+	rospy.sleep(0.3)
+
+
+
+def desviando(mini):
+	global bateu
+	if GonnaCrash(mini):
+		if bateu:
+			Bateu(angulo,diff)
+			bateu = False
+		elif not tempo_de_batida():
+			if (mini[1] <= 360 and mini[1] > 320) or (mini[1] < 40 and mini[1] >= 0):
+				Dont(0)
+			if (mini[1] <= 360 and mini[1] > 288):
+				Dont(1)
+			elif (mini[1] < 72 and mini[1] >= 0):
+				Dont(-1)
+		return "sobreviva"
+	else:
+		desvia = False
+		return "ufa"
+
+#----------------------------------------------------------------------------------------------------
 
 
 
@@ -225,12 +340,13 @@ def roda_todo_frame(imagem):
 
 class Procura(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['achou', 'girando','fugindo'])
+		smach.State.__init__(self, outcomes=['achou', 'girando','fugindo','sobreviva'])
 
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox,centro,area
-
+		if GonnaCrash(mini):
+			return 'sobreviva'
 		rospy.sleep(0.01)
 
 		if(fuga == True):
@@ -248,13 +364,14 @@ class Procura(smach.State):
 
 class Fugindo(smach.State):
 	def __init__(self):
-		smach.State.__init__(self,outcomes=['fugi','fugindo'])
+		smach.State.__init__(self,outcomes=['fugi','fugindo','sobreviva'])
 
 	def execute(self, userdata):
-		global media,area,fuga,velocidade_saida
-
-		x = media[0]
-		y = media[1]
+		global media_cor,area,fuga,velocidade_saida
+		if GonnaCrash(mini):
+			return 'sobreviva'
+		x = media_cor[0]
+		y = media_cor[1]
 		rospy.sleep(0.01)
 
 		if area < 8000:
@@ -278,11 +395,12 @@ class Fugindo(smach.State):
 
 class Seguindo(smach.State):
 	def __init__(self):
-		smach.State.__init__(self, outcomes=['fugindo','seguindo', 'cheguei', 'perdi'])
+		smach.State.__init__(self, outcomes=['fugindo','seguindo', 'cheguei', 'perdi','sobreviva'])
 
 	def execute(self, userdata):
 		global velocidade_saida,bbox
-
+		if GonnaCrash(mini):
+			return 'sobreviva'
 		if(fuga == True):
 			return 'fugindo'
 
@@ -311,6 +429,16 @@ class Seguindo(smach.State):
 				return 'seguindo'
 
 
+
+class Survival(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, outcomes=['sobreviva','ufa'])
+
+
+    def execute(self, userdata):
+	rospy.sleep(0.01)
+	return desviando(mini)
+
 # main
 def main():
 	global velocidade_saida
@@ -321,11 +449,14 @@ def main():
 
 
 	# Para usar a webcam
-	recebedor = rospy.Subscriber("/cv_camera/image_raw/compressed", CompressedImage, roda_todo_frame, queue_size=1, buff_size = 2**24)
+	#recebedor = rospy.Subscriber("/cv_camera/image_raw/compressed", CompressedImage, roda_todo_frame, queue_size=1, buff_size = 2**24)
 	start = rospy.get_rostime()
-	#recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, roda_todo_frame, queue_size=10, buff_size = 2**24)
+	recebedor = rospy.Subscriber("/raspicam_node/image/compressed", CompressedImage, roda_todo_frame, queue_size=10, buff_size = 2**24)
 	velocidade_saida = rospy.Publisher("/cmd_vel", Twist, queue_size = 1)
-
+	recebe_scan = rospy.Subscriber("/scan", LaserScan, scaneou)
+	recebe_scan2 = rospy.Subscriber("/imu", Imu, leu_imu, queue_size =1)
+	
+	
 	# Create a SMACH state machine
 	sm = smach.StateMachine(outcomes=['terminei'])
 
@@ -335,14 +466,15 @@ def main():
 
 		smach.StateMachine.add('PROCURANDO', Procura(),
 								transitions={'girando': 'PROCURANDO',
-								'achou':'SEGUINDO', 'fugindo':'FUGINDO'})
+								'achou':'SEGUINDO', 'fugindo':'FUGINDO','sobreviva':'SOBREVIVA'})
 		smach.StateMachine.add('SEGUINDO', Seguindo(),
 								transitions={'perdi': 'PROCURANDO',
-								'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO','fugindo':'FUGINDO'})
+								'cheguei':'SEGUINDO', 'seguindo':'SEGUINDO','fugindo':'FUGINDO','sobreviva':'SOBREVIVA'})
 		smach.StateMachine.add('FUGINDO', Fugindo(),
 								transitions={'fugindo': 'FUGINDO',
-								'fugi':'PROCURANDO'})
-
+								'fugi':'PROCURANDO','sobreviva':'SOBREVIVA'})
+		smach.StateMachine.add('SOBREVIVA', Survival(),
+	                            transitions={'sobreviva':'SOBREVIVA','ufa': 'PROCURANDO'})
 
 	# Execute SMACH plan
 	outcome = sm.execute()

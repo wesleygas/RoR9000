@@ -122,7 +122,7 @@ class objetoo():
 # # 	(botx,boty) = (np.max(idx),np.max(idy))
 # # 	return objonBG[topx:botx + 1, topy:boty + 1]
 #
-# obj = objeto() 
+# obj = objeto()
 #
 # while True:
 #
