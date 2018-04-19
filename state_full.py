@@ -338,10 +338,20 @@ def Dont(dire):
 	if (dire==0):
 		velocidade = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
 		velocidade_saida.publish(velocidade)
+		rospy.sleep(0.7)
+		velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, 0.5))
+		velocidade_saida.publish(velocidade)
+		rospy.sleep(0.5)
+	else:	
+		velocidade = Twist(Vector3(-0.2, 0, 0), Vector3(0, 0, 0))
+		velocidade_saida.publish(velocidade)
+		rospy.sleep(0.2)
+		velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
+		velocidade_saida.publish(velocidade)
 		rospy.sleep(0.3)
-	velocidade = Twist(Vector3(0, 0, 0), Vector3(0, 0, dire*2))
-	velocidade_saida.publish(velocidade)
-	rospy.sleep(0.3)
+		velocidade = Twist(Vector3(0.2, 0, 0), Vector3(0, 0, 0))
+		velocidade_saida.publish(velocidade)
+		rospy.sleep(0.3)
 
 
 
