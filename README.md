@@ -1,20 +1,15 @@
 # RoR9000
 Repositório da matéria de robótica computacional dedicada para o robô R9000
 
+Antes de tudo, habilite o nó da câmera
 
+Para iniciar, rode o full_state.py
 
-Recursos utilizados:
-  cv_camera (instruções pra launch ta no readme do cv_camera, depois eu vejo isso)
-  darknet_YOLO (possivelmente com CUDA porém essa coisa ta dando um trabalho desgraçado)
-    Por enquanto, é  necessário alterar a __main__ do yolo e hardcode as dimensões do arquivo de camera. Contido no 
-    tópico do cv_camera (use rostopic list e rostopic echo [nome do topico] para descobrir, te vira)
-Baixar o package e instalar com double click além de fazer os dpkg da vida e apt install
-*O maldido do cuda bota o instalador dos samples em /usr/local/cuda-9.1/bin/cuda-install-samples-9.1.sh*
+O primeiro frame é usado como o background e, depois de 120 frames, uma nova imagem é tirada e a diferença usada como objeto a ser seguido
 
-Ao instalar o cudnn, mudar o usr/include/cudnn.h e trocar 
+A partir daí, a máquina tem comportamento de sobrevivência básico utilizando laser e IMU, "foge" da cor azul e segue o objeto aprendido.
 
+Vídeo demonstrativo em:
 
-And try change the line:
-#include "driver_types.h"
-para 
-#include <driver_typer.h>
+https://youtu.be/5EQKq9EhKV8
+
